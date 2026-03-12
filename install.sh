@@ -60,15 +60,13 @@ echo ""
 
 # ── Mount DMG ─────────────────────────────────────────────────────────────────
 info "Mounting DMG..."
-MOUNT_POINT=$(hdiutil attach "$TMP_DMG" -nobrowse -noautoopen -readonly | \
-              awk '/\/Volumes\// { for(i=3;i<=NF;i++) printf "%s%s",(i>3?" ":"",$i); print "" }' | \
-              tail -1)
-
-[[ -n "$MOUNT_POINT" ]] || error "Failed to mount the DMG."
+MOUNT_POINT=$(mktemp -d /tmp/AuraBook-mount-XXXXXX)
+hdiutil attach "$TMP_DMG" -nobrowse -noautoopen -readonly -mountpoint "$MOUNT_POINT" -quiet \
+  || error "Failed to mount the DMG."
 info "Mounted at: ${MOUNT_POINT}"
 
 # Ensure we unmount even if something goes wrong
-trap 'hdiutil detach "$MOUNT_POINT" -quiet 2>/dev/null || true; rm -f "$TMP_DMG"' EXIT
+trap 'hdiutil detach "$MOUNT_POINT" -quiet 2>/dev/null || true; rm -rf "$MOUNT_POINT"; rm -f "$TMP_DMG"' EXIT
 
 # ── Copy to /Applications ─────────────────────────────────────────────────────
 SRC_APP=$(find "$MOUNT_POINT" -maxdepth 1 -name "*.app" | head -1)
@@ -93,7 +91,7 @@ info "Unmounting DMG..."
 hdiutil detach "$MOUNT_POINT" -quiet
 
 # Reset trap (no longer need to unmount)
-trap 'rm -f "$TMP_DMG"' EXIT
+trap 'rm -rf "$MOUNT_POINT"; rm -f "$TMP_DMG"' EXIT
 
 echo ""
 success "${APP_NAME} ${VERSION} installed successfully!"

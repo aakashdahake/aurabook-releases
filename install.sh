@@ -34,6 +34,23 @@ detail()  { echo -e "${DIM}       $*${RESET}"; }
 error()   { echo -e "\n${RED}${BOLD}  ❌  $*${RESET}\n"; exit 1; }
 divider() { echo -e "${DIM}  ────────────────────────────────────────${RESET}"; }
 
+# ── Sudo fallback ─────────────────────────────────────────────────────────────
+# Tries the command without sudo first; if it fails with a permission error,
+# explains why sudo is needed and retries with sudo.
+try_sudo() {
+  if "$@" 2>/tmp/aurabook-err; then
+    return 0
+  fi
+  if grep -qiE "permission denied|operation not permitted|read-only" /tmp/aurabook-err 2>/dev/null; then
+    warn "Permission denied — retrying with sudo (your Mac password may be required)..."
+    detail "Command: sudo $*"
+    sudo "$@"
+  else
+    cat /tmp/aurabook-err >&2
+    return 1
+  fi
+}
+
 # ── Banner ────────────────────────────────────────────────────────────────────
 clear 2>/dev/null || true
 echo ""
@@ -55,7 +72,8 @@ echo -e "  ${DIM}3.${RESET} Installs it to /Applications"
 echo -e "  ${DIM}4.${RESET} Removes the macOS download quarantine flag"
 echo -e "  ${DIM}5.${RESET} Cleans up all temporary files"
 echo ""
-echo -e "  ${DIM}No sudo. No telemetry. Nothing sent anywhere.${RESET}"
+echo -e "  ${DIM}No telemetry. Nothing sent anywhere.${RESET}"
+echo -e "  ${DIM}Sudo is only used if /Applications requires it.${RESET}"
 echo -e "  ${DIM}Source: github.com/aakashdahake/aurabook-releases${RESET}"
 echo ""
 divider
@@ -160,10 +178,10 @@ step "Installing to ${INSTALL_DIR}..."
 
 if [[ -d "$DEST_APP" ]]; then
   warn "Existing installation found — replacing with ${VERSION}..."
-  rm -rf "$DEST_APP"
+  try_sudo rm -rf "$DEST_APP"
 fi
 
-cp -R "$SRC_APP" "$DEST_APP"
+try_sudo cp -R "$SRC_APP" "$DEST_APP"
 success "Copied to /Applications/AuraBook.app"
 
 # ── Strip Gatekeeper quarantine ───────────────────────────────────────────────
@@ -171,7 +189,7 @@ step "Clearing macOS quarantine flag..."
 info "Running: xattr -cr /Applications/AuraBook.app"
 detail "macOS marks downloaded apps as 'quarantined' to show a security warning."
 detail "This step removes that flag so AuraBook opens directly without any prompt."
-xattr -cr "$DEST_APP"
+try_sudo xattr -cr "$DEST_APP"
 success "Quarantine flag cleared — app is ready to open"
 
 echo ""
